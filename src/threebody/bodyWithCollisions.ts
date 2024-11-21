@@ -8,11 +8,14 @@ class Universe {
     bodies: Body[];
     traj: Trajectory[];
     colors: number[];
+    strongForceRange = 3;
     K: 1;
     state: State;
     system: System;
     lastTimestamp: number;
     static instance: Universe|undefined;
+    scaleX = window.innerWidth;
+    scaleY = window.innerHeight;
     kill = false;
     recenter = () => {
         let sum_x = 0;
@@ -24,8 +27,9 @@ class Universe {
         const avg_x = sum_x / this.bodyCount;
         const avg_y = sum_y / this.bodyCount;
         for(let i = 0; i < this.bodyCount; i++) {
-            this.state.bodies[i].position.x -= (avg_x - scaleX/2);
-            this.state.bodies[i].position.y -= (avg_y - scaleY/2);
+            this.state.bodies[i].position.x -= (avg_x - this.scaleX/2);
+            this.state.bodies[i].position.y -= (avg_y - this.scaleY/2);
+            this.traj[i].recenter(avg_x - this.scaleX/2, avg_y - this.scaleY/2);
         }
     }
     delete = () => {
@@ -38,7 +42,8 @@ class Universe {
         collisions: boolean = true,
         collisionRange: number = 9,
         gravityMagnitude:number =1,
-        openUnivserse:boolean = false
+        openUnivserse:boolean = false,
+        strongForceRange = 3,
     ): Universe {
         if(!Universe.instance) {
             Universe.instance = new Universe(
@@ -46,7 +51,8 @@ class Universe {
                 collisions,
                 collisionRange,
                 gravityMagnitude,
-                openUnivserse
+                openUnivserse,
+                strongForceRange
             );
         }
         return Universe.instance;
@@ -57,7 +63,8 @@ class Universe {
         collisions: boolean = true,
         collisionRange: number = 9,
         gravityMagnitude:number =1,
-        openUnivserse:boolean = false
+        openUnivserse:boolean = false,
+        strongForceRange = 3
     ) {
         this.kill = false;
         this.bodyCount = bodyCount;
@@ -65,11 +72,14 @@ class Universe {
         this.collisionRange = collisionRange;
         this.gravityMagnitude = gravityMagnitude;
         this.openUnivserse = openUnivserse;
+        this.strongForceRange = strongForceRange;
         this.canvas = document.createElement("canvas");
         // this.canvas = document.getElementById('threebody') as HTMLCanvasElement;
         this.canvas.setAttribute('id', 'threebody');
-        this.canvas.width = scaleX;
-        this.canvas.height = scaleY;
+        this.canvas.width = window.innerWidth;
+        this.scaleX = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+        this.scaleY = window.innerHeight;
         setTimeout(() => {
             document.body.appendChild(this.canvas);
         },0);
@@ -123,13 +133,13 @@ class Universe {
             this.state.madEqual(sum, 1.0 / 6.0);
             for(let i = 0; i < this.bodyCount; i++) {
                 if(!this.openUnivserse){
-                    this.state.bodies[i].position.x = this.state.bodies[i].position.x % scaleX;
-                    this.state.bodies[i].position.y = this.state.bodies[i].position.y % scaleY;
+                    this.state.bodies[i].position.x = this.state.bodies[i].position.x % this.scaleX;
+                    this.state.bodies[i].position.y = this.state.bodies[i].position.y % this.scaleY;
                     if(this.state.bodies[i].position.x < 0) {
-                        this.state.bodies[i].position.x += scaleX;
+                        this.state.bodies[i].position.x += this.scaleX;
                     }
                     if(this.state.bodies[i].position.y < 0) {
-                        this.state.bodies[i].position.y += scaleY;
+                        this.state.bodies[i].position.y += this.scaleY;
                     }
                 }
                 this.state.bodies[i].velocity.addEqual( kStates[i].bodies[i].velocity );
@@ -294,6 +304,12 @@ class Trajectory {
         }
         this.div_n = div_n;
     }
+    recenter(x:number,y:number) {
+        for (let i = 0; i < this.N; i++) {
+            this.traj[i].x -= x;
+            this.traj[i].y -= y;
+        }
+    }
 
     add(pos: Vector2) {
         if (this.div++ < this.div_n) {
@@ -315,7 +331,7 @@ class Trajectory {
             if(!ctx) { return; }
             const s = (this.traj[pt1].x - this.traj[pt2].x)*(this.traj[pt1].x - this.traj[pt2].x) + (this.traj[pt1].y - this.traj[pt2].y)* (this.traj[pt1].y - this.traj[pt2].y);
             // if(s>100) console.log('s', s, scaleY);
-            if(s<(scaleY*scaleY)/2) { //s<scaleX*scaleX && 
+            if(s<(uni.scaleX*uni.scaleX)/2 && s<(uni.scaleY*uni.scaleY)/2) { //
                 ctx.beginPath();
                 ctx.strokeStyle = "red";
                 ctx.lineWidth = 0.5;
@@ -341,7 +357,7 @@ class Body {
 
 
 const randomPosition = () => {
-    return new Vector2(Math.round(Math.random() * scaleX), Math.round(Math.random() * scaleY));
+    return new Vector2(Math.round(Math.random() * window.innerWidth), Math.round(Math.random() * window.innerHeight));
 }
 const randomVelocity = () => {
     return new Vector2(Math.random() - Math.random(), Math.random() - Math.random());//.mul(1);
@@ -448,7 +464,12 @@ class System {
                     this.dir.normalize().mulEqual(magnitude);
                     this.f[i].subEqual(this.dir);
                     this.f[j].addEqual(this.dir);
-                } else {
+                } else if (sqdis<this.universe.strongForceRange*this.universe.strongForceRange) {
+                    this.universe.bodies[i].velocity = this.universe.bodies[j].velocity;
+                    this.universe.bodies[i].position = this.universe.bodies[j].position;
+
+                }
+                else {
                     console.log('collision');
                     //chemical bonds
                     // this.dir = this.dir.sub(pos[i], pos[j]);
@@ -480,5 +501,3 @@ class System {
 }
 
 export default Universe;
-export const scaleY = window.innerHeight;
-export const scaleX = window.innerWidth;

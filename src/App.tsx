@@ -2,7 +2,7 @@ import React, {useState, useRef} from 'react';
 import logo from './logo.svg';
 import './App.css';
 // import threebody, {scaleX, scaleY} from './threebody/body';
-import Universe, {scaleX, scaleY} from './threebody/bodyWithCollisions';
+import Universe from './threebody/bodyWithCollisions';
 function App() {
   const ls = useRef(localStorage);
   ls.current = localStorage;
@@ -11,6 +11,12 @@ function App() {
   const setBodies = (bodies: number) => {
     updateBodies(bodies);
     ls.current.setItem('bodies', bodies.toString());
+  }
+  const initialstrongForceRange = parseInt(ls.current.getItem('strongForceRange')||'3');
+  const [strongForceRange, updatestrongForceRange] = useState(initialstrongForceRange);
+  const setstrongForceRange = (strongForceRange: number) => {
+    updatestrongForceRange(strongForceRange);
+    ls.current.setItem('strongForceRange', strongForceRange.toString());
   }
   const initialCollisions = ls.current.getItem('collisions') || false;
   const [collisions, updateCollisions] = useState(initialCollisions === 'true');
@@ -63,6 +69,10 @@ function App() {
               <input type="number" id="collisionRange" value={collisionRange} onChange={e => setCollisionRange(parseInt(e.target.value))} />
             </div>
             <div>
+              <label htmlFor="strongForceRange">Strong Force Range</label>
+              <input type="number" id="strongForceRange" value={strongForceRange} onChange={e => setstrongForceRange(parseInt(e.target.value))} />
+            </div>
+            <div>
               <label htmlFor="gravityMagnitude">Gravity Magnitude</label>
               <input type="number" id="gravityMagnitude" value={gravityMagnitude} onChange={e => setGravityMagnitude(parseInt(e.target.value))} />
             </div>
@@ -70,7 +80,7 @@ function App() {
               let universe = Universe.getInstance();
               universe.delete();
               // universe = Universe.getInstance(bodies);
-              universe = Universe.getInstance(bodies, collisions, collisionRange, gravityMagnitude, openUnivserse);
+              universe = Universe.getInstance(bodies, collisions, collisionRange, gravityMagnitude, openUnivserse, strongForceRange);
               // universe.setBodies(bodies);
               // universe.setCollisions(collisions);
               // universe.setCollisionRange(collisionRange);
@@ -91,7 +101,7 @@ function App() {
     );
   }
 
-  const universe = Universe.getInstance(bodies, collisions, collisionRange, gravityMagnitude, openUnivserse);
+  const universe = Universe.getInstance(bodies, collisions, collisionRange, gravityMagnitude, openUnivserse, strongForceRange);
   React.useEffect(() => {
     universe.start();
   }, []);
