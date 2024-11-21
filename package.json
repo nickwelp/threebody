@@ -28,6 +28,7 @@
       "react-app/jest"
     ]
   },
+  "homepage": "https://nickwelp.github.io/threebody",
   "browserslist": {
     "production": [
       ">0.2%",
