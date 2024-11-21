@@ -1,4 +1,183 @@
+class Universe {
+    bodyCount: number;
+    collisions: boolean = true;
+    collisionRange: number = 9;
+    gravityMagnitude:number =1;
+    openUnivserse:boolean = false;
+    canvas: HTMLCanvasElement;
+    bodies: Body[];
+    traj: Trajectory[];
+    colors: number[];
+    K: 1;
+    state: State;
+    system: System;
+    lastTimestamp: number;
+    static instance: Universe|undefined;
+    kill = false;
+    recenter = () => {
+        let sum_x = 0;
+        let sum_y = 0;
+        for(let i = 0; i < this.bodyCount; i++) {
+            sum_x += this.state.bodies[i].position.x;
+            sum_y += this.state.bodies[i].position.y;
+        }
+        const avg_x = sum_x / this.bodyCount;
+        const avg_y = sum_y / this.bodyCount;
+        for(let i = 0; i < this.bodyCount; i++) {
+            this.state.bodies[i].position.x -= (avg_x - scaleX/2);
+            this.state.bodies[i].position.y -= (avg_y - scaleY/2);
+        }
+    }
+    delete = () => {
+        this.kill = true;
+        this.canvas.remove();
+        Universe.instance = undefined;
+    }
+    // only supply a number if you want to override the default body count
+    static getInstance(num: number = 10, 
+        collisions: boolean = true,
+        collisionRange: number = 9,
+        gravityMagnitude:number =1,
+        openUnivserse:boolean = false
+    ): Universe {
+        if(!Universe.instance) {
+            Universe.instance = new Universe(
+                num,
+                collisions,
+                collisionRange,
+                gravityMagnitude,
+                openUnivserse
+            );
+        }
+        return Universe.instance;
+    }
 
+    constructor(
+        bodyCount: number = 10,
+        collisions: boolean = true,
+        collisionRange: number = 9,
+        gravityMagnitude:number =1,
+        openUnivserse:boolean = false
+    ) {
+        this.kill = false;
+        this.bodyCount = bodyCount;
+        this.collisions = collisions;
+        this.collisionRange = collisionRange;
+        this.gravityMagnitude = gravityMagnitude;
+        this.openUnivserse = openUnivserse;
+        this.canvas = document.createElement("canvas");
+        // this.canvas = document.getElementById('threebody') as HTMLCanvasElement;
+        this.canvas.setAttribute('id', 'threebody');
+        this.canvas.width = scaleX;
+        this.canvas.height = scaleY;
+        setTimeout(() => {
+            document.body.appendChild(this.canvas);
+        },0);
+        this.bodies = new Array(bodyCount);
+        this.traj = new Array(bodyCount);
+        this.colors = new Array(bodyCount);
+        this.K = 1;
+        // this.state = new State(bodyCount);
+        this.system = new System(this);
+        this.lastTimestamp = new Date().getTime();
+        for (let i = 0; i < bodyCount; i++) {
+            this.bodies[i] = new Body(randomPosition(), randomVelocity());
+        }
+        this.state = new State(bodyCount, this.bodies.map(b => b.position), this.bodies.map(b => b.velocity));
+        for (let i = 0; i < bodyCount; i++) {
+            this.traj[i] = new Trajectory(this.bodies[i].position, 5);
+        }
+        for (let i = 0; i < bodyCount; i++) {
+            //hsl
+            this.colors[i] = Math.random() * 360;
+        }
+    }
+ 
+    draw = () => {
+        const ts = new Date().getTime();
+        const deltaTime = ts - this.lastTimestamp;
+        this.lastTimestamp = ts; 
+        const dt = deltaTime / 100;
+        const kStates = new Array(this.bodyCount+1);
+        for(let i = 0; i < this.bodyCount+1; i++) {
+            kStates[i] = new State(this.bodyCount);
+        }
+        let K=1;
+        for(let k=0; k<K; k++ ) {
+            kStates[0].set( this.system.ff( this.state ) ).mulEqual(dt);
+
+            for(let i = 1; i < this.bodyCount; i++) {
+                kStates[i].set(this.system.ff( kStates[i].set(this.state).madEqual(kStates[i-1], 0.5))).mulEqual(dt);
+            }
+            kStates[this.bodyCount].set( this.system.ff( kStates[this.bodyCount].addEqual(kStates[this.bodyCount-1]) ) ).mulEqual(dt);
+            const sumRollUp = (k:number):State => {
+                if(k === this.bodyCount-1) {
+                    return kStates[k].addEqual(kStates[k+1]);
+                }
+                // return kStates[k].madEqual(sumRollUp(k+1), 2.0);
+                return kStates[k].madEqual(sumRollUp(k+1), 1.0);
+
+            }
+
+            const sum = sumRollUp(0);
+            this.state.madEqual(sum, 1.0 / 6.0);
+            for(let i = 0; i < this.bodyCount; i++) {
+                if(!this.openUnivserse){
+                    this.state.bodies[i].position.x = this.state.bodies[i].position.x % scaleX;
+                    this.state.bodies[i].position.y = this.state.bodies[i].position.y % scaleY;
+                    if(this.state.bodies[i].position.x < 0) {
+                        this.state.bodies[i].position.x += scaleX;
+                    }
+                    if(this.state.bodies[i].position.y < 0) {
+                        this.state.bodies[i].position.y += scaleY;
+                    }
+                }
+                this.state.bodies[i].velocity.addEqual( kStates[i].bodies[i].velocity );
+            }
+            for(let i=0; i<this.bodyCount; i++ ) {
+                this.traj[i].add( this.state.bodies[i].position );
+            }
+        }
+    }
+    hasStarted = 0;
+    start = () => {
+        if(this.hasStarted) {
+            return;
+        }
+        this.hasStarted = 1;
+        const cycle = () => {
+            if(this.kill) {
+                return;
+            }
+            this.draw();
+            this.render();
+            setTimeout(cycle, 0);
+        }
+        cycle();
+    }
+
+
+    render = () => {
+        const ctx = this.canvas.getContext('2d');
+        if(!ctx) { return; }
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        for (let i = 0; i < this.bodyCount; i++) {
+            ctx.beginPath();
+            ctx.fillStyle = `hsl(${this.colors[i]}, 100%, 100%)`;
+            ctx.arc(this.state.bodies[i].position.x, this.state.bodies[i].position.y, 2, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.closePath();
+            this.traj[i].draw();
+        }
+
+    };
+
+   
+  }
+
+ 
 
 
 class Vector2 {
@@ -95,17 +274,10 @@ class Vector2 {
 }
 
 
-const bodyCount = 20;
+const bodyCount = 10;
 // const bodyCount = 70;
 // const bodyCount = 10;
-export const scaleY = window.innerHeight;
-export const scaleX = window.innerWidth;
-let canvas: HTMLCanvasElement;
-const bodies = new Array(bodyCount);
-const traj = new Array(bodyCount);
-const colors = new Array(bodyCount);   
-const graph_name = "none";
-let K = 1;
+
 
 
 
@@ -135,10 +307,11 @@ class Trajectory {
 
     }
     draw() {
+        const uni = Universe.getInstance();
         for (let i = 0; i < this.N - 1; i++) {
             const pt1 = (this.cursor + i) % this.N;
             const pt2 = (this.cursor + i + 1) % this.N;
-            const ctx = canvas.getContext('2d');
+            const ctx = uni.canvas.getContext('2d');
             if(!ctx) { return; }
             const s = (this.traj[pt1].x - this.traj[pt2].x)*(this.traj[pt1].x - this.traj[pt2].x) + (this.traj[pt1].y - this.traj[pt2].y)* (this.traj[pt1].y - this.traj[pt2].y);
             // if(s>100) console.log('s', s, scaleY);
@@ -171,7 +344,7 @@ const randomPosition = () => {
     return new Vector2(Math.round(Math.random() * scaleX), Math.round(Math.random() * scaleY));
 }
 const randomVelocity = () => {
-    return new Vector2(Math.random() - 0.5, Math.random() - 0.5);
+    return new Vector2(Math.random() - Math.random(), Math.random() - Math.random());//.mul(1);
 }
 
 
@@ -249,22 +422,27 @@ class State {
 }
 
 class System {
-    f: Vector2[] = new Array(bodyCount);
+    universe: Universe;  
+    f: Vector2[];
     dir = new Vector2(0, 0);
-    constructor() {
-        for (let i = 0; i < bodyCount; i++) {
+    ret_state: State;
+    constructor(universe: Universe) {
+        this.f = new Array(universe.bodyCount);
+        this.universe = universe;
+        this.ret_state = new State(this.universe.bodyCount);
+        for (let i = 0; i < this.universe.bodyCount; i++) {
             this.f[i] = new Vector2(0, 0);
         }
     }
     acc(pos: Vector2[]): Vector2[] {
-        for (let i = 0; i < bodyCount; i++) {
+        for (let i = 0; i < this.universe.bodyCount; i++) {
             this.f[i].setZero();
         }
-        for (let i = 0; i < bodyCount; i++) {
-            for (let j = i + 1; j < bodyCount; j++) {
+        for (let i = 0; i < this.universe.bodyCount; i++) {
+            for (let j = i + 1; j < this.universe.bodyCount; j++) {
                 // pure gravity
                 let sqdis = pos[i].sqDistance(pos[j]);
-                if(sqdis>81 ) {
+                if(!this.universe.collisions || sqdis>(this.universe.collisionRange*this.universe.collisionRange) ) {
                     let magnitude = 1/ Math.sqrt(sqdis);
                     this.dir = this.dir.sub(pos[i], pos[j]);
                     this.dir.normalize().mulEqual(magnitude);
@@ -288,7 +466,7 @@ class System {
         }
         return this.f;
     }
-    ret_state = new State(bodyCount);
+    
 
     ff(state: State): State {
         let a = this.acc(state.bodies.map(b => b.position));
@@ -301,134 +479,6 @@ class System {
 
 }
 
-let state = new State(bodyCount);
-const system = new System();
-
-const setup = () => {
-    for (let i = 0; i < bodyCount; i++) {
-        const rp = randomPosition();
-        const {x,y} = rp;
-        // console.log(`randomPosition x: ${x}, y: ${y}`);
-        bodies[i] = new Body(rp, randomVelocity());
-    }
-    state = new State(bodyCount, bodies.map(b => b.position), bodies.map(b => b.velocity));
-    for (let i = 0; i < bodyCount; i++) {
-        traj[i] = new Trajectory(state.bodies[i].position, 5);
-    }
-    for (let i = 0; i < bodyCount; i++) {
-        //hsl
-        colors[i] = Math.random() * 360;
-    }
-
-}
-
-
-     
-        
-     
-let lastTimestamp = new Date().getTime();
-const draw = () => {
-    // const dt = 0.05 / K;
-    // const dt = 1; //0.05/K;
-    const ts = new Date().getTime();
-    const deltaTime = ts - lastTimestamp;
-    lastTimestamp = ts; 
-    const dt = deltaTime / 100;
-    const kStates = new Array(bodyCount+1);
-    for(let i = 0; i < bodyCount+1; i++) {
-        kStates[i] = new State(bodyCount);
-    }
-
-    // State k1 = new State();
-    // State k2 = new State();
-    // State k3 = new State();
-    // State k4 = new State();
-
-    // console.log("Body count", bodyCount);
-    for(let k=0; k<K; k++ ) {
-        kStates[0].set( system.ff( state ) ).mulEqual(dt);
-
-        for(let i = 1; i < bodyCount; i++) {
-            kStates[i].set(system.ff( kStates[i].set(state).madEqual(kStates[i-1], 0.5))).mulEqual(dt);
-        }
-        kStates[bodyCount].set( system.ff( kStates[bodyCount].addEqual(kStates[bodyCount-1]) ) ).mulEqual(dt);
-        const sumRollUp = (k:number):State => {
-            if(k === bodyCount-1) {
-                return kStates[k].addEqual(kStates[k+1]);
-            }
-            // return kStates[k].madEqual(sumRollUp(k+1), 2.0);
-            return kStates[k].madEqual(sumRollUp(k+1), 1.0);
-
-        }
-
-        const sum = sumRollUp(0);
-        state.madEqual(sum, 1.0 / 6.0);
-        for(let i = 0; i < bodyCount; i++) {
-            state.bodies[i].position.x = state.bodies[i].position.x % scaleX;
-            state.bodies[i].position.y = state.bodies[i].position.y % scaleY;
-            if(state.bodies[i].position.x < 0) {
-                state.bodies[i].position.x += scaleX;
-            }
-            if(state.bodies[i].position.y < 0) {
-                state.bodies[i].position.y += scaleY;
-            }
-            state.bodies[i].velocity.addEqual( kStates[i].bodies[i].velocity );
-        }
-        for(let i=0; i<bodyCount; i++ ) {
-            traj[i].add( state.bodies[i].position );
-        }
-    }
-
-   
-  }
-
-let instance=0;
-const start = () => {
-    if(instance) {
-        return;
-    }
-    instance = 1;
-    setup();
-    canvas = document.getElementById('threebody') as HTMLCanvasElement;
-    const ctx = canvas.getContext('2d');
-    canvas.width = scaleX;
-    canvas.height = scaleY;
-    setTimeout(() => {
-        document.body.appendChild(canvas);
-    },0);
-    // @ts-ignore
-    window.canvas = canvas;
-    
-    setInterval(() => {
-        draw();
-        render();
-    }, 1);
-}
-
-let count = 0;
-
-const render = () => {
-    // console.log("render count", count++);
-    const ctx = canvas.getContext('2d');
-    if(!ctx) { return; }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < bodyCount; i++) {
-        ctx.beginPath();
-        // ctx.fillStyle = `hsl(${colors[i]}, 50%, 50%)`;
-        // ctx.arc(traj[i].traj[traj[i].cursor].x, traj[i].traj[traj[i].cursor].y, 2, 0, 2 * Math.PI);
-        // ctx.fill();
-        ctx.fillStyle = `hsl(${colors[i]}, 100%, 100%)`;
-        ctx.arc(state.bodies[i].position.x, state.bodies[i].position.y, 2, 0, 2 * Math.PI);
-        ctx.fill();
-        // ctx.strokeStyle = `hsl(${colors[i]}, 100%, 50%)`;
-        // ctx.lineWidth = 1;  ctx.stroke();
-        ctx.closePath();
-        traj[i].draw();
-    }
-
-};
-
-export default start;
+export default Universe;
+export const scaleY = window.innerHeight;
+export const scaleX = window.innerWidth;
