@@ -17,19 +17,41 @@ class Universe {
     scaleX = window.innerWidth;
     scaleY = window.innerHeight;
     kill = false;
+    centerUniverse: boolean = false;
     recenter = () => {
         let sum_x = 0;
         let sum_y = 0;
-        for(let i = 0; i < this.bodyCount; i++) {
-            sum_x += this.state.bodies[i].position.x;
-            sum_y += this.state.bodies[i].position.y;
+        let sum_weight = 0;
+        for(let i = 0; i < this.bodies.length; i++) {
+            sum_x += this.state.bodies[i].position.x * this.state.bodies[i].weight;
+            sum_y += this.state.bodies[i].position.y * this.state.bodies[i].weight;
+            sum_weight += this.state.bodies[i].weight;
         }
-        const avg_x = sum_x / this.bodyCount;
-        const avg_y = sum_y / this.bodyCount;
+        const avg_x = sum_x / sum_weight;
+        const avg_y = sum_y / sum_weight;
         for(let i = 0; i < this.bodyCount; i++) {
             this.state.bodies[i].position.x -= (avg_x - this.scaleX/2);
             this.state.bodies[i].position.y -= (avg_y - this.scaleY/2);
             this.traj[i].recenter(avg_x - this.scaleX/2, avg_y - this.scaleY/2);
+        }
+    }
+    solarSystem = () => {
+        // for(let i = 0; i < this.state.bodies.length-1; i++) {
+        for(let i = 0; i < 29; i++) {
+            this.bodies[i].position = new Vector2(this.scaleX/2, this.scaleY/2);
+            this.state.bodies[i].position = new Vector2(this.scaleX/2, this.scaleY/2);
+            this.state.bodies[i].velocity = new Vector2(0, 0);
+
+            // this.bodies[0].position = new Vector2(this.scaleX/2, this.scaleY/2);
+            this.bodies[i].velocity = new Vector2(0, 0);
+        }
+        // this.bodies[0].weight = 10;
+        for(let i = 29; i<this.state.bodies.length; i++) {
+            this.state.bodies[i].position = new Vector2(this.scaleX/2 + 100, this.scaleY/2);
+            this.state.bodies[i].velocity = new Vector2(0,5);
+
+            this.bodies[i].position = new Vector2(this.scaleX*3/4, this.scaleY/2);
+            this.bodies[i].velocity = new Vector2(0, 2);
         }
     }
     delete = () => {
@@ -44,6 +66,7 @@ class Universe {
         gravityMagnitude:number =1,
         openUnivserse:boolean = false,
         strongForceRange = 3,
+        centerUniverse = false
     ): Universe {
         if(!Universe.instance) {
             Universe.instance = new Universe(
@@ -52,7 +75,7 @@ class Universe {
                 collisionRange,
                 gravityMagnitude,
                 openUnivserse,
-                strongForceRange
+                strongForceRange, centerUniverse
             );
         }
         return Universe.instance;
@@ -64,7 +87,8 @@ class Universe {
         collisionRange: number = 9,
         gravityMagnitude:number =1,
         openUnivserse:boolean = false,
-        strongForceRange = 3
+        strongForceRange = 3,
+        centerUniverse = false
     ) {
         this.kill = false;
         this.bodyCount = bodyCount;
@@ -73,6 +97,7 @@ class Universe {
         this.gravityMagnitude = gravityMagnitude;
         this.openUnivserse = openUnivserse;
         this.strongForceRange = strongForceRange;
+        this.centerUniverse = centerUniverse;
         this.canvas = document.createElement("canvas");
         // this.canvas = document.getElementById('threebody') as HTMLCanvasElement;
         this.canvas.setAttribute('id', 'threebody');
@@ -165,7 +190,9 @@ class Universe {
         }
         cycle();
     }
-
+    setCenterUniverse = (centerUniverse: boolean) => {
+        this.centerUniverse = centerUniverse;
+    }
 
     render = () => {
         const ctx = this.canvas.getContext('2d');
@@ -173,10 +200,15 @@ class Universe {
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         ctx.fillStyle = "black";
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        for (let i = 0; i < this.bodyCount; i++) {
+
+        if (this.openUnivserse && this.centerUniverse) {
+            this.recenter();
+        }
+        for (let i = 0; i < this.bodies.length; i++) {
+            if(this.bodies[i].weight === 0) { continue; }
             ctx.beginPath();
             ctx.fillStyle = `hsl(${this.colors[i]}, 100%, 100%)`;
-            ctx.arc(this.state.bodies[i].position.x, this.state.bodies[i].position.y, 2, 0, 2 * Math.PI);
+            ctx.arc(this.state.bodies[i].position.x, this.state.bodies[i].position.y, 2 * this.bodies[i].weight, 0, 2 * Math.PI);
             ctx.fill();
             ctx.closePath();
             this.traj[i].draw();
@@ -283,14 +315,6 @@ class Vector2 {
     }
 }
 
-
-const bodyCount = 10;
-// const bodyCount = 70;
-// const bodyCount = 10;
-
-
-
-
 class Trajectory {
     N = 20;
     traj: Vector2[];
@@ -330,11 +354,10 @@ class Trajectory {
             const ctx = uni.canvas.getContext('2d');
             if(!ctx) { return; }
             const s = (this.traj[pt1].x - this.traj[pt2].x)*(this.traj[pt1].x - this.traj[pt2].x) + (this.traj[pt1].y - this.traj[pt2].y)* (this.traj[pt1].y - this.traj[pt2].y);
-            // if(s>100) console.log('s', s, scaleY);
             if(s<(uni.scaleX*uni.scaleX)/2 && s<(uni.scaleY*uni.scaleY)/2) { //
                 ctx.beginPath();
                 ctx.strokeStyle = "red";
-                ctx.lineWidth = 0.5;
+                ctx.lineWidth = 0.5 * Math.sqrt(uni.bodies[0].weight);
                 ctx.moveTo(this.traj[pt1].x, this.traj[pt1].y);
                 ctx.lineTo(this.traj[pt2].x, this.traj[pt2].y);
                 ctx.stroke();
@@ -348,6 +371,7 @@ class Trajectory {
 class Body {
     position: Vector2;
     velocity: Vector2;
+    weight: number = 1;
     constructor(pos: Vector2, vel: Vector2) {
         this.position = new Vector2(pos);
         this.velocity = new Vector2(vel);
@@ -430,8 +454,10 @@ class State {
     }
     set(f: State): State {
         for(let i = 0; i<this.bodies.length; i++) {
-            this.bodies[i].position.set(f.bodies[i].position);
-            this.bodies[i].velocity.set(f.bodies[i].velocity);
+            if(f&&f.bodies&& f.bodies[i]) {
+                this.bodies[i].position.set(f.bodies[i].position);
+                this.bodies[i].velocity.set(f.bodies[i].velocity);
+            }
         }
         return this;
     }
@@ -455,26 +481,52 @@ class System {
             this.f[i].setZero();
         }
         for (let i = 0; i < this.universe.bodyCount; i++) {
+            if(this.universe.bodies[i].weight === 0) {
+                continue;
+            }
             for (let j = i + 1; j < this.universe.bodyCount; j++) {
+                if(this.universe.bodies[j].weight === 0) {
+                    continue;
+                }
                 // pure gravity
                 let sqdis = pos[i].sqDistance(pos[j]);
                 if(!this.universe.collisions || sqdis>(this.universe.collisionRange*this.universe.collisionRange) ) {
-                    let magnitude = 1/ Math.sqrt(sqdis);
+                    let magnitude = this.universe.gravityMagnitude * this.universe.bodies[i].weight * this.universe.bodies[j].weight/ Math.sqrt(sqdis);
                     this.dir = this.dir.sub(pos[i], pos[j]);
                     this.dir.normalize().mulEqual(magnitude);
                     this.f[i].subEqual(this.dir);
                     this.f[j].addEqual(this.dir);
-                } else if (sqdis<this.universe.strongForceRange*this.universe.strongForceRange) {
-                    this.universe.bodies[i].velocity = this.universe.bodies[j].velocity;
-                    this.universe.bodies[i].position = this.universe.bodies[j].position;
+                }else {
 
-                }
-                else {
-                    console.log('collision');
+                //   if (sqdis<this.universe.strongForceRange*this.universe.strongForceRange && ) {
+                //     // this.universe.bodies[i].velocity = this.universe.bodies[j].velocity;
+                    // this.universe.bodies[i].position = this.universe.bodies[j].position;
+         
                     //chemical bonds
                     // this.dir = this.dir.sub(pos[i], pos[j]);
                     // let magnitude = 1/ Math.sqrt(sqdis);
                     // this.dir.normalize().mulEqual(magnitude);
+                    const vel1 = new Vector2(this.universe.bodies[i].velocity);
+                    const vel2 = new Vector2(this.universe.bodies[j].velocity);
+                    const energy1 = new Vector2(vel1.x*vel1.x, vel1.y*vel1.y).mul(this.universe.bodies[i].weight);
+                    const energy2 = new Vector2(vel2.x*vel2.x, vel2.y*vel2.y).mul(this.universe.bodies[j].weight);
+                    // now a mass of 2 for E = mv^2
+                    const totalEnergy = energy1.add(energy2);
+                    const energPerBody = totalEnergy.mul(0.5);
+                    const weight_avg = (this.universe.bodies[i].weight + this.universe.bodies[j].weight)/2;
+                    const new_velocity = new Vector2(Math.sqrt(energPerBody.x)/weight_avg, Math.sqrt(energPerBody.y)/weight_avg);
+
+
+                    // const ratio = new Vector2(energy1.x/energy2.x, energy1.y/energy2.y);
+
+                    // const vel3 = new Vector2(Math.sqrt(vel1.x*velvel2.x*vel2.x),Math.sqrt(vel1.y*vel1.y + vel2.y*vel2.y));
+                    // vel1.addEqual(vel2);
+                    // // because they have the same mass we can just average their velocities
+                    // vel1.mul(vel3;
+                    // vel1.mulEqual(0.5);
+                    this.universe.bodies[i].velocity = new_velocity;
+                    this.universe.bodies[j].velocity = new_velocity;
+
                     pos[i].addEqual(pos[j]);
                     pos[j].set(pos[i]);
                     pos[i].mulEqual(0.5);
@@ -482,8 +534,20 @@ class System {
 
                     // this.f[i].subEqual(this.dir);
                     // this.f[j].addEqual(this.dir);
+                    // some strongforce threshhold
+                    // fail to meet
+                    if(sqdis<this.universe.strongForceRange && totalEnergy.sqDistance(new Vector2(0,0))>0.4){ //this.universe.strongForceRange*this.universe.strongForceRange) {
+                        console.log('collision -- particles merged total energy:', totalEnergy.sqDistance(new Vector2(0,0)));
+                    // if(sqdis < Math.sqrt(this.universe.strongForceRange)
+                    //     ||sqdis<this.universe.strongForceRange && systemVelocity.sqDistance(new Vector2(0,0))>0.2
+                    // ){
+                        this.universe.bodies[i].weight += this.universe.bodies[j].weight;
+                        this.universe.bodies[j].weight = 0;
+                        console.log('collision -- particles merged');
+                    }    
                 }
             }
+
         }
         return this.f;
     }

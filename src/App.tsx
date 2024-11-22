@@ -24,6 +24,16 @@ function App() {
     updateCollisions(collisions);
     ls.current.setItem('collisions', collisions.toString());
   }
+
+  const initialCenterUniverse = ls.current.getItem('centerUniverse') || false;
+  const [centerUniverse, updatecenterUniverse] = useState(initialCenterUniverse === 'true');
+  const setCenterUniverse = (centerUniverse: boolean) => {
+    updatecenterUniverse(centerUniverse);
+    const universe = Universe.getInstance();
+    universe.setCenterUniverse(centerUniverse);
+    ls.current.setItem('centerUniverse', centerUniverse.toString());
+  }
+
   const initialCollisionRange = parseInt(ls.current.getItem('collisionRange')||'9');
   const [collisionRange, updateCollisionRange] = useState(initialCollisionRange);
   const setCollisionRange = (collisionRange: number) => {
@@ -64,6 +74,10 @@ function App() {
               <label htmlFor="collisions">Open Universe</label>
               <input type="checkbox" id="open_universe" checked={openUnivserse} onChange={e => setOpenUniverse(!openUnivserse)} />
             </div>
+            {openUnivserse && (<div>
+              <label htmlFor="centerUniverse">Center Universe</label>
+              <input type="checkbox" id="center_universe" checked={centerUniverse} onChange={e => setCenterUniverse(!centerUniverse)} />
+            </div>)}
             <div>
               <label htmlFor="collisionRange">Collision Range</label>
               <input type="number" id="collisionRange" value={collisionRange} onChange={e => setCollisionRange(parseInt(e.target.value))} />
@@ -92,6 +106,13 @@ function App() {
               let universe = Universe.getInstance();
               universe.recenter();
             }}>Center</button>
+            <button onClick={() => {
+              let universe = Universe.getInstance();
+              universe.delete();
+              universe = Universe.getInstance(50, true, 9, 1, true, 3, true);
+              universe.solarSystem();
+              universe.start();
+            }}>Solar Model</button>
           </>
         )}
         {!menuOpen && (
